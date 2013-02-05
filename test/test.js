@@ -11,7 +11,10 @@ function _log(msg, type) {
   type = type || 'log';
 
   if (typeof(document) != 'undefined') {
-    document.write('<div class="' + type + '">' + msg.replace(/\n/g, '<br />') + '</div>');
+    var el = document.createElement('div');
+    el.className = type;
+    el.innerHTML = msg.replace(/\n/g, '<br />');
+    document.body.appendChild(el);
   }
   if (typeof(console) != 'undefined') {
     var color = {
@@ -101,13 +104,33 @@ assert(
 
 // Verify explicit options produce expected id
 var id = uuid.v1({
-  msecs: 1321651533573,
+  msecs: 1321651533573, // Fri Nov 18 2011 13:25:33 GMT-0800 (PST)
   nsecs: 5432,
   clockseq: 0x385c,
   node: [ 0x61, 0xcd, 0x3c, 0xbb, 0x32, 0x10 ]
 });
 assert(id == 'd9428888-122b-11e1-b85c-61cd3cbb3210', 'Explicit options produce expected id');
 
+var bytes = uuid.parse(id);
+
+var gets = [
+  'getTimeLow',
+  'getTimeMid',
+  'getTimeHi',
+  'getDate',
+  'getVersion',
+  'getClockSeq',
+  'isValidRFC',
+  'getNode'
+];
+gets.forEach(function(method) {
+  var val = uuid[method](bytes);
+  if (typeof(val) == 'number') {
+    val = '0x' + val.toString(16);
+  }
+  log(method + ': ' + val);
+});
+log('----');
 // Verify adjacent ids across a msec boundary are 1 time unit apart
 var u0 = uuid.v1({msecs: TIME, nsecs: 9999});
 var u1 = uuid.v1({msecs: TIME + 1, nsecs: 0});
@@ -117,13 +140,13 @@ var dt = parseInt(after, 16) - parseInt(before, 16);
 assert(dt === 1, 'Ids spanning 1ms boundary are 100ns apart');
 
 //
-// Test parse/unparse
+// Test parse/stringify
 //
 
 id = '00112233445566778899aabbccddeeff';
-assert(uuid.unparse(uuid.parse(id.substr(0,10))) ==
+assert(uuid.stringify(uuid.parse(id.substr(0,10))) ==
   '00112233-4400-0000-0000-000000000000', 'Short parse');
-assert(uuid.unparse(uuid.parse('(this is the uuid -> ' + id + id)) ==
+assert(uuid.stringify(uuid.parse('(this is the uuid -> ' + id + id)) ==
   '00112233-4455-6677-8899-aabbccddeeff', 'Dirty parse');
 
 //
@@ -163,7 +186,7 @@ for (var version in generators) {
       throw Error(id + ' is not a valid UUID string');
     }
 
-    if (id != uuid.unparse(uuid.parse(id))) {
+    if (id != uuid.stringify(uuid.parse(id))) {
       assert(fail, id + ' is not a valid id');
     }
 
@@ -215,7 +238,7 @@ for (var version in generators) {
 for (var version in generators) {
   log('\nPerformance testing ' + version + ' UUIDs');
   var generator = generators[version];
-  var buf = new uuid.BufferClass(16);
+  var buf = new Array(16);
 
   for (var i = 0, t = Date.now(); i < N; i++) generator();
   rate('uuid.' + version + '()', t);

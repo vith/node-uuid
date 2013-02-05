@@ -3,42 +3,70 @@
 //     Copyright (c) 2010-2012 Robert Kieffer
 //     MIT License - http://opensource.org/licenses/mit-license.php
 
-(function() {
-  var _global = this;
+(function (root) {
+  // Module name and public api object
+  var apiName = 'uuid', api = {};
+
+  /* SECTION: stringify */
+
+  // One-off map of value -> hex string
+  for (var i = 0, toHex = []; i < 256; i++) {
+    toHex[i] = (i + 0x100).toString(16).substr(1);
+  }
+
+  // **`stringify()` - Convert array of uuid bytes into RFC4122-style uuid string
+  function stringify(arr, offset) {
+    offset = offset || 0;
+    return  toHex[arr[offset++]] + toHex[arr[offset++]] +
+            toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
+            toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
+            toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
+            toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
+            toHex[arr[offset++]] + toHex[arr[offset++]] +
+            toHex[arr[offset++]] + toHex[arr[offset++]] +
+            toHex[arr[i++]] + toHex[arr[offset++]];
+  }
+
+  api.stringify = stringify;
+
+  /* SECTION: random */
 
   // Unique ID creation requires a high quality random # generator.  We feature
   // detect to determine the best RNG source, normalizing to a function that
   // returns 128-bits of randomness, since that's what's usually required
-  var _rng;
 
-  // Node.js crypto-based RNG - http://nodejs.org/docs/v0.6.2/api/crypto.html
-  //
-  // Moderately fast, high quality
+  var getRandomBytes;
+
   if (typeof(require) == 'function') {
+    // Node.js crypto-based RNG - http://nodejs.org/docs/v0.6.2/api/crypto.html
+    //
+    // Moderately fast, high quality
     try {
       var _rb = require('crypto').randomBytes;
-      _rng = _rb && function() {return _rb(16);};
+      getRandomBytes = _rb && function() {
+        return _rb(16);
+      };
     } catch(e) {}
   }
 
-  if (!_rng && _global.crypto && crypto.getRandomValues) {
+  if (!getRandomBytes && typeof('crypto') == 'object' && crypto.getRandomValues) {
     // WHATWG crypto-based RNG - http://wiki.whatwg.org/wiki/Crypto
     //
     // Moderately fast, high quality
     var _rnds8 = new Uint8Array(16);
-    _rng = function whatwgRNG() {
+    getRandomBytes = function() {
       crypto.getRandomValues(_rnds8);
       return _rnds8;
     };
   }
 
-  if (!_rng) {
+  if (!getRandomBytes) {
     // Math.random()-based (RNG)
     //
     // If all else fails, use Math.random().  It's fast, but is of unspecified
     // quality.
     var  _rnds = new Array(16);
-    _rng = function() {
+    getRandomBytes = function() {
       for (var i = 0, r; i < 16; i++) {
         if ((i & 0x03) === 0) r = Math.random() * 0x100000000;
         _rnds[i] = r >>> ((i & 0x03) << 3) & 0xff;
@@ -48,48 +76,9 @@
     };
   }
 
-  // Buffer class to use
-  var BufferClass = typeof(Buffer) == 'function' ? Buffer : Array;
+  api.getRandomBytes = getRandomBytes;
 
-  // Maps for number <-> hex string conversion
-  var _byteToHex = [];
-  var _hexToByte = {};
-  for (var i = 0; i < 256; i++) {
-    _byteToHex[i] = (i + 0x100).toString(16).substr(1);
-    _hexToByte[_byteToHex[i]] = i;
-  }
-
-  // **`parse()` - Parse a UUID into it's component bytes**
-  function parse(s, buf, offset) {
-    var i = (buf && offset) || 0, ii = 0;
-
-    buf = buf || [];
-    s.toLowerCase().replace(/[0-9a-f]{2}/g, function(oct) {
-      if (ii < 16) { // Don't overflow!
-        buf[i + ii++] = _hexToByte[oct];
-      }
-    });
-
-    // Zero out remaining bytes if string was short
-    while (ii < 16) {
-      buf[i + ii++] = 0;
-    }
-
-    return buf;
-  }
-
-  // **`unparse()` - Convert UUID byte array (ala parse()) into a string**
-  function unparse(buf, offset) {
-    var i = offset || 0, bth = _byteToHex;
-    return  bth[buf[i++]] + bth[buf[i++]] +
-            bth[buf[i++]] + bth[buf[i++]] + '-' +
-            bth[buf[i++]] + bth[buf[i++]] + '-' +
-            bth[buf[i++]] + bth[buf[i++]] + '-' +
-            bth[buf[i++]] + bth[buf[i++]] + '-' +
-            bth[buf[i++]] + bth[buf[i++]] +
-            bth[buf[i++]] + bth[buf[i++]] +
-            bth[buf[i++]] + bth[buf[i++]];
-  }
+  /* SECTION: v1 */
 
   // **`v1()` - Generate time-based UUID**
   //
@@ -97,7 +86,7 @@
   // and http://docs.python.org/library/uuid.html
 
   // random #'s we need to init node and clockseq
-  var _seedBytes = _rng();
+  var _seedBytes = getRandomBytes();
 
   // Per 4.5, create and 48-bit node id, (47 random bits + multicast bit = 1)
   var _nodeId = [
@@ -184,8 +173,12 @@
       b[i + n] = node[n];
     }
 
-    return buf ? buf : unparse(b);
+    return buf ? buf : stringify(b);
   }
+
+  api.v1 = v1;
+
+  /* SECTION: v4 */
 
   // **`v4()` - Generate random UUID**
 
@@ -194,13 +187,9 @@
     // Deprecated - 'format' argument, as supported in v1.2
     var i = buf && offset || 0;
 
-    if (typeof(options) == 'string') {
-      buf = options == 'binary' ? new BufferClass(16) : null;
-      options = null;
-    }
     options = options || {};
 
-    var rnds = options.random || (options.rng || _rng)();
+    var rnds = options.random || (options.rng || getRandomBytes)();
 
     // Per 4.4, set bits for version and `clock_seq_hi_and_reserved`
     rnds[6] = (rnds[6] & 0x0f) | 0x40;
@@ -213,33 +202,101 @@
       }
     }
 
-    return buf || unparse(rnds);
+    return buf || stringify(rnds);
   }
 
-  // Export public API
-  var uuid = v4;
-  uuid.v1 = v1;
-  uuid.v4 = v4;
-  uuid.parse = parse;
-  uuid.unparse = unparse;
-  uuid.BufferClass = BufferClass;
+  api.v4 = v4;
 
-  if (_global.define && define.amd) {
-    // Publish as AMD module
-    define(function() {return uuid;});
-  } else if (typeof(module) != 'undefined' && module.exports) {
-    // Publish as node.js module
-    module.exports = uuid;
-  } else {
-    // Publish as global (in browsers)
-    var _previousRoot = _global.uuid;
+  /* SECTION: parse */
 
-    // **`noConflict()` - (browser only) to reset global 'uuid' var**
-    uuid.noConflict = function() {
-      _global.uuid = _previousRoot;
-      return uuid;
+  var VALID_RE = new RegExp(
+    '(?:urn:uuid:)?' +       // URN prefix (optional)
+    '[0-9a-fA-F]{8}' + '-' + // time_low
+    '[0-9a-fA-F]{4}' + '-' + // time_mid
+    '[1-5][0-9a-fA-F]{3}' + '-' + // time_hi_and_version
+    '[89abAB][0-9a-fA-F]{3}' + '-' + // clk_seq_hi_res & clk_seq_low
+    '[0-9a-fA-F]{12}'        // node
+  );
+
+  // **`validate()` - A basic UUID format checker**
+  //
+  // Validate a string as being in RFC4122 UUID string representation (see RFC
+  // section 3)
+  function validate(s) {
+    return VALID_RE.test(s);
+  }
+
+  // **`parse()` - Parse a RFC4122 UUID string**
+  //
+  // Returns an object with the following properties:
+  //
+  // * timestamp - 1-msec units, unix epoch
+  // * version - see RFC section 4.1.3
+  // * variant - see RFC section 4.1.1
+  // * clockSeq - see RFC section 4.1.3
+  // * node - see RFC section 4.1.6
+  // * bytes - parsed byte values
+  //
+  // By default the parser will throw for strings not in proper RFC format.
+  // This can be disabled by passing 'true' for the 2nd argument, in which case
+  // the parser becomes almost overly liberal - it will parse any JS string,
+  // using any available hex octets as input.
+  function parse(s, liberal) {
+    if (!liberal && !validate(s)) {
+      throw new Error('Invalid RFC4122 UUID');
+    }
+
+    // Parse byte values
+    var b = s.match(/[0-9a-fA-F]{2}/g) || [];
+    for (var i = 0; i < b.length; i++) {
+      b[i] = parseInt(b[i], 16);
+    }
+
+    // Get timestamp fields
+    var low = (b[0] * 0x1000000) + (b[1] << 16) + (b[2] << 8) + b[3];
+    var mid = (b[4] << 8) + b[5];
+    var hi = ((b[6] & 0x0f) << 8) + b[7];
+
+    var o = {
+      // timestamp (translated from 100-nsec, gregorian epoch UUID time to
+      // 1-msec, unix epoch JS time).
+      // Note: this is a potentially lossy transform!
+      timestamp: (hi * 0x10000 + mid) / 10000 * 0x100000000 +
+             low / 10000 - 12219292800000,
+
+      version: (b[6] & 0xf0) >> 4,
+
+      variant: b[8] & 0xc0,
+
+      clockseq: (((b[8]) & 0x3f) << 8) | b[9],
+
+      node: ((b[10] << 16) + (b[11] << 8) + b[12]) * 0x1000000 +
+            (b[13] << 16) + (b[14] << 8) + b[15]
     };
 
-    _global.uuid = uuid;
+    return o;
   }
-}());
+
+  api.VALID_RE = VALID_RE;
+  api.validate = validate;
+  api.parse = parse;
+
+  /* SECTION: publish */
+
+  // Boilerplate code for publishing the 'api' object, as a module named
+  // 'apiName' in any(?) module environment
+  if (typeof exports === 'object') {
+    module.exports = factory();
+  } else if (typeof define === 'function' && define.amd) {
+    define(function() {return moduleAPI;});
+  } else {
+    var _previousRoot = root[apiName];
+
+    moduleAPI.noConflict = function() {
+      root[apiName] = _previousRoot;
+      return moduleAPI;
+    };
+
+    root[apiName] = moduleAPI;
+  }
+}(this));
