@@ -1,13 +1,13 @@
-//     uuid.js
-//
-//     Copyright (c) 2010-2012 Robert Kieffer
-//     MIT License - http://opensource.org/licenses/mit-license.php
+// @License
+// uuid.js
+// Copyright (c) 2010-2012 Robert Kieffer
+// MIT License - http://opensource.org/licenses/mit-license.php
 
 (function (root) {
-  // Module name and public api object
-  var apiName = 'uuid', api = {};
+  // The public API to export (a.k.a. module.exports)
+  var api = {};
 
-  /* SECTION: stringify */
+  /* SECTION stringify */
 
   // One-off map of value -> hex string
   for (var i = 0, toHex = []; i < 256; i++) {
@@ -16,7 +16,7 @@
 
   // **`stringify()` - Convert array of uuid bytes into RFC4122-style uuid string
   function stringify(arr, offset) {
-    offset = offset || 0;
+    offset  = offset || 0;
     return  toHex[arr[offset++]] + toHex[arr[offset++]] +
             toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
             toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
@@ -24,12 +24,12 @@
             toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
             toHex[arr[offset++]] + toHex[arr[offset++]] +
             toHex[arr[offset++]] + toHex[arr[offset++]] +
-            toHex[arr[i++]] + toHex[arr[offset++]];
+            toHex[arr[offset++]] + toHex[arr[offset++]];
   }
 
   api.stringify = stringify;
 
-  /* SECTION: random */
+  /* SECTION random */
 
   // Unique ID creation requires a high quality random # generator.  We feature
   // detect to determine the best RNG source, normalizing to a function that
@@ -78,7 +78,7 @@
 
   api.getRandomBytes = getRandomBytes;
 
-  /* SECTION: v1 */
+  /* SECTION v1 REQUIRES stringify, random */
 
   // **`v1()` - Generate time-based UUID**
   //
@@ -178,7 +178,7 @@
 
   api.v1 = v1;
 
-  /* SECTION: v4 */
+  /* SECTION v4 REQUIRES stringify, random */
 
   // **`v4()` - Generate random UUID**
 
@@ -207,15 +207,18 @@
 
   api.v4 = v4;
 
-  /* SECTION: parse */
+  /* SECTION parse */
 
+  // Regex for identifying valid RFC4122 UUIDs
   var VALID_RE = new RegExp(
-    '(?:urn:uuid:)?' +       // URN prefix (optional)
-    '[0-9a-fA-F]{8}' + '-' + // time_low
-    '[0-9a-fA-F]{4}' + '-' + // time_mid
+    '^\\s*' +                 // leading whitespace (optional)
+    '(?:urn:uuid:)?' +        // URN prefix (optional)
+    '[0-9a-fA-F]{8}' + '-' +  // time_low
+    '[0-9a-fA-F]{4}' + '-' +  // time_mid
     '[1-5][0-9a-fA-F]{3}' + '-' + // time_hi_and_version
     '[89abAB][0-9a-fA-F]{3}' + '-' + // clk_seq_hi_res & clk_seq_low
-    '[0-9a-fA-F]{12}'        // node
+    '[0-9a-fA-F]{12}' +       // node
+    '\\s*$'                   // trailing whitespace (optional)
   );
 
   // **`validate()` - A basic UUID format checker**
@@ -239,39 +242,48 @@
   //
   // By default the parser will throw for strings not in proper RFC format.
   // This can be disabled by passing 'true' for the 2nd argument, in which case
-  // the parser becomes almost overly liberal - it will parse any JS string,
-  // using any available hex octets as input.
-  function parse(s, liberal) {
-    if (!liberal && !validate(s)) {
+  // the parser will parse any JS string, using any hex octets found as input.
+  function parse(s, nonstrict) {
+    if (!nonstrict && !validate(s)) {
       throw new Error('Invalid RFC4122 UUID');
     }
 
-    // Parse byte values
+    // Extract hex octets (pairs of hex digits)
     var b = s.match(/[0-9a-fA-F]{2}/g) || [];
     for (var i = 0; i < b.length; i++) {
       b[i] = parseInt(b[i], 16);
     }
 
     // Get timestamp fields
-    var low = (b[0] * 0x1000000) + (b[1] << 16) + (b[2] << 8) + b[3];
-    var mid = (b[4] << 8) + b[5];
-    var hi = ((b[6] & 0x0f) << 8) + b[7];
+    var time_low = (b[0] * 0x1000000) + (b[1] << 16) + (b[2] << 8) + b[3];
+    var time_mid = (b[4] << 8) + b[5];
+    var time_hi = ((b[6] & 0x0f) << 8) + b[7];
+
+    // Convert timestamp to msecs+nsecs since unix epoch
+    var _thm = (time_hi * 0x10000 + time_mid) / 10000 * 0x100000000;
+    var _tl = time_low / 10000;
+    time_msecs = Math.floor(_thm + _tl);
+    time_nsecs = _thm - time_msecs + _tl;
+    time_msecs -= 12219292800000; // msecs between gregoriean -> unix epochs
 
     var o = {
-      // timestamp (translated from 100-nsec, gregorian epoch UUID time to
-      // 1-msec, unix epoch JS time).
-      // Note: this is a potentially lossy transform!
-      timestamp: (hi * 0x10000 + mid) / 10000 * 0x100000000 +
-             low / 10000 - 12219292800000,
+      bytes: b,
 
-      version: (b[6] & 0xf0) >> 4,
+      time_hi:    time_hi,
+      time_mid:   time_mid,
+      time_low:   time_low,
 
-      variant: b[8] & 0xc0,
+      time_msecs: time_msecs,
+      time_nsecs: time_nsecs,
 
-      clockseq: (((b[8]) & 0x3f) << 8) | b[9],
+      version:    (b[6] & 0xf0) >>> 4,
 
-      node: ((b[10] << 16) + (b[11] << 8) + b[12]) * 0x1000000 +
-            (b[13] << 16) + (b[14] << 8) + b[15]
+      variant:    b[8] & 0xc0,
+
+      clockseq:   (((b[8]) & 0x3f) << 8) | b[9],
+
+      node:       ((b[10] << 16) + (b[11] << 8) + b[12]) * 0x1000000 +
+                  (b[13] << 16) + (b[14] << 8) + b[15]
     };
 
     return o;
@@ -281,22 +293,22 @@
   api.validate = validate;
   api.parse = parse;
 
-  /* SECTION: publish */
+  /* SECTION */
 
-  // Boilerplate code for publishing the 'api' object, as a module named
-  // 'apiName' in any(?) module environment
+  // Boilerplate code for publishing an object to CommonJS, AMD, or browser
+  // environments.  See https://github.com/umdjs/umd
   if (typeof exports === 'object') {
-    module.exports = factory();
+    module.exports = api;
   } else if (typeof define === 'function' && define.amd) {
-    define(function() {return moduleAPI;});
+    define(function() {return api;});
   } else {
-    var _previousRoot = root[apiName];
+    var _previousAPI = root.uuid;
 
-    moduleAPI.noConflict = function() {
-      root[apiName] = _previousRoot;
-      return moduleAPI;
+    api.noConflict = function() {
+      root.uuid = _previousAPI;
+      return api;
     };
 
-    root[apiName] = moduleAPI;
+    root.uuid = api;
   }
 }(this));

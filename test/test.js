@@ -111,26 +111,10 @@ var id = uuid.v1({
 });
 assert(id == 'd9428888-122b-11e1-b85c-61cd3cbb3210', 'Explicit options produce expected id');
 
-var bytes = uuid.parse(id);
+var parsed = uuid.parse(id);
 
-var gets = [
-  'getTimeLow',
-  'getTimeMid',
-  'getTimeHi',
-  'getDate',
-  'getVersion',
-  'getClockSeq',
-  'isValidRFC',
-  'getNode'
-];
-gets.forEach(function(method) {
-  var val = uuid[method](bytes);
-  if (typeof(val) == 'number') {
-    val = '0x' + val.toString(16);
-  }
-  log(method + ': ' + val);
-});
-log('----');
+log('parsed:', parsed);
+
 // Verify adjacent ids across a msec boundary are 1 time unit apart
 var u0 = uuid.v1({msecs: TIME, nsecs: 9999});
 var u1 = uuid.v1({msecs: TIME + 1, nsecs: 0});
@@ -144,9 +128,9 @@ assert(dt === 1, 'Ids spanning 1ms boundary are 100ns apart');
 //
 
 id = '00112233445566778899aabbccddeeff';
-assert(uuid.stringify(uuid.parse(id.substr(0,10))) ==
+assert(uuid.stringify(uuid.parse(id.substr(0,10), true)) ==
   '00112233-4400-0000-0000-000000000000', 'Short parse');
-assert(uuid.stringify(uuid.parse('(this is the uuid -> ' + id + id)) ==
+assert(uuid.stringify(uuid.parse('(this is the uuid -> ' + id + id, true)) ==
   '00112233-4455-6677-8899-aabbccddeeff', 'Dirty parse');
 
 //
