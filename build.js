@@ -6,12 +6,13 @@
 /*
 Generate one or more optimized versions of a JS script.
 
-Produces output files for each of the defined PRODUCTS (below), by removing any
-SECTIONs that aren't required, and minifying the result.
+Produces output files for each of the products defined in the input [JSON]
+file.  Transformations include removal of any unrequired SECTIONs and Uglify-based minification.
 
-This is a bit ad-hoc, but it's the best(?) solution currently available for providing a runnable development file, while providing a reasonable set of options for developers that want to minimize bytes-over-the-wire in production.
+This is a bit ad-hoc, and not particularly efficient, but it does what we're
+with a minimum of complexity.
 
-Usage: node build.js
+Usage: node build.js (config_file)
 */
 
 var fs = require('fs');
@@ -22,7 +23,7 @@ if (process.argv.length != 3) {
   console.log("Usage: node build.js [config file]");
   process.exit();
 }
-var PRODUCTS = JSON.parse(fs.readFileSync(process.argv.pop()));
+var config = JSON.parse(fs.readFileSync(process.argv.pop()));
 
 // Regex for detecting "SECTION" lines
 var SECTION_RE = /\/\*\s*SECTION\s+(?:(\w+)(?:\s+REQUIRES\s+([\w, ]*))?)?/;
@@ -33,7 +34,7 @@ function generateProduct(product) {
   // Read input file
   var source = fs.readFileSync(product.input, 'utf8').split('\n');
 
-  // Build dependency map
+  // Build map of dependencies declared by sections
   var dependencies = {};
   source.forEach(function(line) {
     if (SECTION_RE.test(line)) {
@@ -44,7 +45,7 @@ function generateProduct(product) {
     }
   });
 
-  // Build a map of all dependencies required by section
+  // Build [flattened] map of product dependencies
   var buildRequires = function(map, section) {
     var seen = map[section];
     map[section] = true;
@@ -56,20 +57,20 @@ function generateProduct(product) {
     }
     return map;
   };
+  var productMap = product.requires.reduce(buildRequires, {});
 
-  var requires = product.requires.reduce(buildRequires, {});
-
-  // Include only the specified sections of source
+  // Filter out unrequired sections
   var include = true;
   var outSource = source.filter(function(line) {
     var isDeclaration = SECTION_RE.test(line);
     var section = RegExp.$1;
     if (isDeclaration) {
-      include = !section || requires[section];
+      include = !section || productMap[section];
     }
     return include;
   });
 
+  // Transform
   var ast = UglifyJS.parse(outSource.join('\n'));
 
   // Mangle names
@@ -84,7 +85,7 @@ function generateProduct(product) {
   ast.mangle_names();
 
  var stream = UglifyJS.OutputStream({
-   /* uncomment for slightly-more debuggable code
+   /* debugging minified code may be a bit easier with these options
    beautify      : true, // beautify output?
    bracketize    : true, // use brackets every time?
    comments      : true, // output comments?
@@ -96,6 +97,6 @@ function generateProduct(product) {
 }
 
 // Build each output product
-PRODUCTS.forEach(generateProduct);
+config.forEach(generateProduct);
 
 console.log('done');
