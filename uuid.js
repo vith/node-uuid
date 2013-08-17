@@ -9,25 +9,57 @@
 
   /* SECTION stringify */
 
-  // One-off map of value -> hex string
-  for (var i = 0, toHex = []; i < 256; i++) {
-    toHex[i] = (i + 0x100).toString(16).substr(1);
+  // Map of byte -> octets string
+  for (var i = 0, octets = []; i < 256; i++) {
+    octets[i] = (i + 0x100).toString(16).substr(1);
   }
 
   // **`stringify()` - Convert array of uuid bytes into RFC4122-style uuid string
-  function stringify(arr, offset) {
-    offset  = offset || 0;
-    return  toHex[arr[offset++]] + toHex[arr[offset++]] +
-            toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
-            toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
-            toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
-            toHex[arr[offset++]] + toHex[arr[offset++]] + '-' +
-            toHex[arr[offset++]] + toHex[arr[offset++]] +
-            toHex[arr[offset++]] + toHex[arr[offset++]] +
-            toHex[arr[offset++]] + toHex[arr[offset++]];
-  }
+  api.stringify = function(bytes) {
+    return  octets[bytes[0]] + octets[bytes[1]] +
+            octets[bytes[2]] + octets[bytes[3]] + '-' +
+            octets[bytes[4]] + octets[bytes[5]] + '-' +
+            octets[bytes[6]] + octets[bytes[7]] + '-' +
+            octets[bytes[8]] + octets[bytes[9]] + '-' +
+            octets[bytes[10]] + octets[bytes[11]] +
+            octets[bytes[12]] + octets[bytes[13]] +
+            octets[bytes[14]] + octets[bytes[15]];
+  };
 
-  api.stringify = stringify;
+  /* SECTION rfc2bytes */
+  api.rfc2bytes = function(rfc) {
+    var bytes = new Array(16);
+    var node_hi = Math.floor(rfc.node / 0x1000000);
+    var node_lo = rfc.node & 0x1000000;
+
+    // time_low
+    bytes[0] = (rfc.time_low >>> 24) & 0xff;
+    bytes[1] = (rfc.time_low >>> 16) & 0xff;
+    bytes[2] = (rfc.time_low >>> 8) & 0xff;
+    bytes[3] = rfc.time_low & 0xff;
+
+    // time_mid
+    bytes[4] = (rfc.time_mid >>> 8) & 0xff;
+    bytes[5] = rfc.time_mid & 0xff;
+
+    // time_hi & version
+    bytes[6] = (rfc.version & 0xf) << 4 | (rfc.time_hi >>> 8 & 0xf);
+    bytes[7] = rfc.time_hi & 0xff;
+
+    // clockseq & variant
+    bytes[8] = rfc.clockseq >> 8 & 0x3f | 0x80;
+    bytes[9] = rfc.clockseq & 0xff;
+
+    // node id
+    bytes[10] = node_hi >>> 16 & 0xff;
+    bytes[11] = node_hi >>> 8 & 0xff;
+    bytes[12] = node_hi & 0xff;
+    bytes[13] = node_lo >>> 16 & 0xff;
+    bytes[14] = node_lo >>> 8 & 0xff;
+    bytes[15] = node_lo & 0xff;
+
+    return bytes;
+  };
 
   /* SECTION random */
 
@@ -173,7 +205,7 @@
       b[i + n] = node[n];
     }
 
-    return buf ? buf : stringify(b);
+    return buf ? buf : api.stringify(b);
   }
 
   api.v1 = v1;
@@ -202,7 +234,7 @@
       }
     }
 
-    return buf || stringify(rnds);
+    return buf || api.stringify(rnds);
   }
 
   api.v4 = v4;
@@ -276,11 +308,11 @@
       time_msecs: time_msecs,
       time_nsecs: time_nsecs,
 
-      version:    (b[6] & 0xf0) >>> 4,
+      version:    b[6] >> 4 & 0xf,
 
       variant:    b[8] & 0xc0,
 
-      clockseq:   (((b[8]) & 0x3f) << 8) | b[9],
+      clockseq:   ((b[8]) & 0x3f) << 8 | b[9],
 
       node:       ((b[10] << 16) + (b[11] << 8) + b[12]) * 0x1000000 +
                   (b[13] << 16) + (b[14] << 8) + b[15]
