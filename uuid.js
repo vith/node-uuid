@@ -329,10 +329,12 @@
 
   // Boilerplate code for publishing an object to CommonJS, AMD, or browser
   // environments.  See https://github.com/umdjs/umd
-  if (typeof exports === 'object') {
-    module.exports = api;
-  } else if (typeof define === 'function' && define.amd) {
+  if (typeof define === 'function' && define.amd) {
+    // Publish as AMD module
     define(function() {return api;});
+  } else if (typeof(module) != 'undefined' && module.exports) {
+    // Publish as node.js module
+    module.exports = api;
   } else {
     var _previousAPI = root.uuid;
 
@@ -343,4 +345,4 @@
 
     root.uuid = api;
   }
-}(this));
+}).call(this);
