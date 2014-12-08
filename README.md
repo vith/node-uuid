@@ -8,8 +8,8 @@ Features:
 * Runs in node.js and all browsers.
 * Registered as a [ComponentJS](https://github.com/component/component) [component](https://github.com/component/component/wiki/Components) ('broofa/node-uuid').
 * Cryptographically strong random # generation on supporting platforms
-* 1.1K minified and gzip'ed  (Want something smaller?  Check this [crazy shit](https://gist.github.com/982883) out! )
-* [Annotated source code](http://broofa.github.com/node-uuid/docs/uuid.html)
+
+`uuid.js` provides the complete API documented below.   In the event you need only the `uuid.v1()` or `uuid.v4()` methods for ID creation, you can use the more compact `uuid-v1.js` or `uuid-v4.js` scripts, respectively.
 
 ## Getting Started
 
@@ -35,14 +35,13 @@ Then create some ids ...
 // Generate a v1 (time-based) id
 uuid.v1(); // -> '6c84fb90-12c4-11e1-840d-7b25c5ee775a'
 
-// Generate a v4 (random) id
+// ... or generate a v4 (random) id
 uuid.v4(); // -> '110ec58a-a0f2-4ac4-8393-c866d813b8d1'
 ```
 
 ## API
 
 ### uuid.v1([`options` [, `buffer` [, `offset`]]])
-
 Generate and return a RFC4122 v1 (timestamp-based) UUID.
 
 * `options` - (Object) Optional uuid state to apply. Properties may include:
@@ -120,9 +119,9 @@ uuid.v4(null, buffer, 16);
 ```
 
 ### uuid.parse(id[, buffer[, offset]])
-### uuid.unparse(buffer[, offset])
+### uuid.stringify(buffer[, offset])
 
-Parse and unparse UUIDs
+Parse and stringify UUIDs
 
   * `id` - (String) UUID(-like) string
   * `buffer` - (Array | Buffer) Array or buffer where UUID bytes are to be written. Default: A new Array or Buffer is used
@@ -137,7 +136,7 @@ var string = uuid.unparse(bytes); // -> '797ff043-11eb-11e1-80d6-510998755d10'
 
 ### uuid.noConflict()
 
-(Browsers only) Set `uuid` property back to it's previous value.
+(Browsers only) Return `uuid` property back to it's previous value.
 
 Returns the node-uuid object.
 
@@ -148,47 +147,23 @@ var myUuid = uuid.noConflict();
 myUuid.v1(); // -> '6c84fb90-12c4-11e1-840d-7b25c5ee775a'
 ```
 
-## Deprecated APIs
-
-Support for the following v1.2 APIs is available in v1.3, but is deprecated and will be removed in the next major version.
-
-### uuid([format [, buffer [, offset]]])
-
-uuid() has become uuid.v4(), and the `format` argument is now implicit in the `buffer` argument. (i.e. if you specify a buffer, the format is assumed to be binary).
-
-### uuid.BufferClass
-
-The class of container created when generating binary uuid data if no buffer argument is specified.  This is expected to go away, with no replacement API.
-
 ## Testing
 
-In node.js
-
 ```
-> cd test
-> node test.js
+> npm test
 ```
-
-In Browser
-
-```
-open test/test.html
-```
-
-### Benchmarking
-
-Requires node.js
-
-```
-npm install uuid uuid-js
-node benchmark/benchmark.js
-```
-
-For a more complete discussion of node-uuid performance, please see the `benchmark/README.md` file, and the [benchmark wiki](https://github.com/broofa/node-uuid/wiki/Benchmark)
 
 For browser performance [checkout the JSPerf tests](http://jsperf.com/node-uuid-performance).
 
 ## Release notes
+
+### 2.0.0
+* Bulk overhaul of codebase to accomodate various long-overdue requests from people
+* Add uuid-v1.js and uuid-v4.js build products
+* `uuid.parseFields` method for extracting semantic RFC fields (most notably v1 time info)
+* Remove public `BufferClass` property
+* Switch to `nodeunit` for testing
+* Clean up obsolete test and benchmark code
 
 ### 1.4.0
 
