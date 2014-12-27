@@ -58,6 +58,8 @@
   for (var i = 0, _toHex = []; i < 256; i++) {
     _toHex[i] = (i + 0x100).toString(16).substr(1);
   }
+  // Public for test purposes only!  Not part of supported API.
+  uuid._rng = _rng;
 
   /**
    * **`stringify()` - Convert uuid bytes to RFC4122-style uuid
