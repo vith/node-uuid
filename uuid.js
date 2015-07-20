@@ -4,7 +4,7 @@
 //     MIT License - http://opensource.org/licenses/mit-license.php
 
 (function() {
-  var _global = this;
+  var _global = this || window;
 
   // Unique ID creation requires a high quality random # generator.  We feature
   // detect to determine the best RNG source, normalizing to a function that
@@ -233,7 +233,7 @@
   } else  if (typeof define === 'function' && define.amd) {
     // Publish as AMD module
     define(function() {return uuid;});
- 
+
 
   } else {
     // Publish as global (in browsers)
